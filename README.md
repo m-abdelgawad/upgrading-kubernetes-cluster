@@ -92,6 +92,157 @@ kubeadm version
 ```
 kubeadm upgrade plan
 ```
+<img src="readme_files/7.png">
+
+4. Choose a version to upgrade to, and run the appropriate command. In this example, we will upgrade to v1.29.1:
+```
+# replace x with the patch version you picked for this upgrade
+sudo kubeadm upgrade apply v1.29.1
+```
+<img src="readme_files/8.png">
+<img src="readme_files/9.png">
+
+5. Now that we've updated kubeadm, when we check the nodes again, we still see that the version of the controlplane node is v1.29.0. Why is that? Because the reported version in this command is the version of the kubelet component; which is not updated with the kubeadm command. It should be updated separately.
+<img src="readme_files/10.png">
+
+6. Prepare the node for maintenance by marking it unschedulable and evicting the workloads:
+```
+kubectl drain master --ignore-daemonsets
+```
+<img src="readme_files/11.png">
+
+7. Upgrade the kubelet and kubectl:
+```
+# replace x in 1.29.x-* with the latest patch version
+sudo apt-mark unhold kubelet kubectl && \
+sudo apt-get update && sudo apt-get install -y kubelet='1.29.1-1.1' kubectl='1.29.1-1.1' && \
+sudo apt-mark hold kubelet kubectl
+```
+<img src="readme_files/12.png">
+
+8. Restart the kubelet:
+```
+sudo systemctl daemon-reload
+sudo systemctl restart kubelet
+```
+
+9. Bring the node back online by marking it schedulable:
+```
+# replace <node-to-uncordon> with the name of your node
+kubectl uncordon master
+```
+
+10. I am using swap in my cluster. That's why after finishing these steps, we need to reconfigure kubelet to allow swap. Otherwise, kubelet will fail to start again:
+   * First, open the configurations file of kubelet: 
+
+       `vim /var/lib/kubelet/config.yaml`
+
+   * Add the below lines at the end of the file:
+
+     ```
+     failSwapOn: false
+     featureGates:
+       NodeSwap: true
+     memorySwap:
+       swapBehavior: LimitedSwap
+     ```
+
+   * Restart systemd daemon and the kubelet service:
+
+     ```
+     systemctl daemon-reload ; systemctl restart kubelet.service
+     ```
+
+   * Check the status of the kubelet service; it should be active and running now:
+
+     ```
+     systemctl status kubelet.service
+     ```
+
+11. Verify the status of the cluster. Now, we can see that the version of the kubelet on the master node is upgraded successfully and the node is ready:
+```
+kubectl get nodes
+```
+<img src="readme_files/13.png">
+
+12. If, for any reason, you find that kubelet is not responding or failing to restart, we can check the latest logs by using below command:
+```
+journalctl -u kubelet -n 100
+```
+<img src="readme_files/14.png">
+
+### Worker Node Steps
+
+1. First, we open the documentation of upgrading the worker nodes <a href="https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/upgrading-linux-nodes/">here</a>.
+<img src="readme_files/15.png">
+
+2. Upgrade kubeadm:
+```
+# replace x in 1.29.x-* with the latest patch version
+apt-mark unhold kubeadm && \
+apt-get update && apt-get install -y kubeadm='1.29.1-1.1' && \
+apt-mark hold kubeadm
+```
+<img src="readme_files/16.png">
+
+3. Call "kubeadm upgrade". For worker nodes this upgrades the local kubelet configuration:
+```
+sudo kubeadm upgrade node
+```
+<img src="readme_files/17.png">
+
+4. Drain the node. Prepare the node for maintenance by marking it unschedulable and evicting the workloads:
+```
+# execute this command on a control plane node
+# replace <node-to-drain> with the name of your node you are draining
+kubectl drain worker1 --ignore-daemonsets
+```
+<img src="readme_files/18.png">
+
+5. Upgrade kubelet and kubectl.
+```
+# replace x in 1.29.x-* with the latest patch version
+apt-mark unhold kubelet kubectl && \
+apt-get update && apt-get install -y kubelet='1.29.1-1.1' kubectl='1.29.1-1.1' && \
+apt-mark hold kubelet kubectl
+```
+<img src="readme_files/19.png">
+
+10. I am using swap in my cluster. That's why after finishing these steps, we need to reconfigure kubelet to allow swap. Otherwise, kubelet will fail to start again:
+   * First, open the configurations file of kubelet: 
+
+       `vim /var/lib/kubelet/config.yaml`
+
+   * Add the below lines at the end of the file:
+
+     ```
+     failSwapOn: false
+     featureGates:
+       NodeSwap: true
+     memorySwap:
+       swapBehavior: LimitedSwap
+     ```
+
+11. Restart systemd daemon and the kubelet service:
+
+  ```
+  systemctl daemon-reload ; systemctl restart kubelet.service
+  ```
+
+12. Check the status of the kubelet service; it should be active and running now:
+
+  ```
+  systemctl status kubelet.service
+  ```
+<img src="readme_files/20.png">
+
+13. Uncordon the node:
+```
+# execute this command on a control plane node
+# replace <node-to-uncordon> with the name of your node
+kubectl uncordon worker1
+```
+<img src="readme_files/21.png">
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
